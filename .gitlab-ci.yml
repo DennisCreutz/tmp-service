@@ -1,0 +1,74 @@
+image:
+  name: hashicorp/terraform:light
+  entrypoint:
+    - '/usr/bin/env'
+    - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+before_script:
+  - apk add -U --no-cache jq
+  - cat $TRIGGER_PAYLOAD
+  - export TF_VAR_user_id=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_user_id')
+  - export TF_VAR_service_id=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_service_id')
+  - export TF_VAR_ecs_tf_backend_bucket=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_ecs_tf_backend_bucket')
+  - export TF_VAR_ecs_tf_backend_key=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_ecs_tf_backend_key')
+  - export TF_VAR_ecr_tf_backend_bucket=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_ecr_tf_backend_bucket')
+  - export TF_VAR_ecr_tf_backend_key=$(cat $TRIGGER_PAYLOAD | jq -r 'select(objects) | .TF_VAR_ecr_tf_backend_key')
+  - cd infrastructure/ecs-tmp-service
+  - export AWS_ACCESS_KEY=${AWS_ACCESS_KEY_ID}
+  - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+  - rm -rf .terraform
+  - terraform --version
+  - terraform init -backend-config="bucket=${BACKEND_BUCKET}" -backend-config="key=live/ecs-tmp-services/prod/ecs/tmp-services/"$TF_VAR_service_id"/terraform.tfstate" -backend-config="dynamodb_table=${BACKEND_DB}"
+
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+.destroy_rules:
+  rules:
+    - if: $DESTROY == "true"
+      when: always
+    - when: never
+.apply_rules:
+  rules:
+    - if: $DESTROY != "true"
+      when: always
+    - when: never
+
+validate:
+    stage: validate
+    script:
+        - terraform validate
+
+plan:
+    stage: plan
+    rules:
+        - !reference [.apply_rules, rules]
+    script:
+        - terraform plan -out "planfile"
+    dependencies:
+        - validate
+    artifacts:
+        paths:
+            - infrastructure/ecs-tmp-service/planfile
+        expire_in: 1 day
+
+apply:
+  stage: apply
+  rules:
+      - !reference [.apply_rules, rules]
+  script:
+    - terraform apply -input=false "planfile"
+  dependencies:
+    - plan
+
+destroy:
+    stage: destroy
+    rules:
+        - !reference [.destroy_rules, rules]
+    script:
+        - terraform destroy -auto-approve
+    dependencies:
+        - validate
