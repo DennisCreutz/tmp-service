@@ -12,19 +12,23 @@ variable "service_id" {
   }
 }
 
-variable "ecs_tf_backend_bucket" {
+variable "ecs_tf_backend_bucket" {#
+  description = "The S3 bucket name for the ECS Terraform remote state"
   type = string
 }
 
 variable "ecs_tf_backend_key" {
+  description = "The S3 key for the ECS Terraform remote state."
   type = string
 }
 
 variable "ecr_tf_backend_bucket" {
+  description = "The S3 bucket name for the ECR Terraform remote state"
   type = string
 }
 
 variable "ecr_tf_backend_key" {
+  description = "The S3 key for the ECR Terraform remote state."
   type = string
 }
 
